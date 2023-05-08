@@ -75,7 +75,7 @@ module MultiTenant
 
     def visit_Arel_Nodes_Equality(o, *args)
       if o.left.is_a?(Arel::Attributes::Attribute)
-        table_name = o.left.relation.table_name
+        table_name = o.left.relation.name
         model = MultiTenant.multi_tenant_model_for_table(table_name)
         @current_context.visited_handled_relation(o.left.relation) if model.present? && o.left.name.to_s == model.partition_key.to_s
       end
@@ -91,7 +91,7 @@ module MultiTenant
     end
 
     def visit_Arel_Table(o, _collector = nil)
-      @current_context.visited_relation(o) if tenant_relation?(o.table_name)
+      @current_context.visited_relation(o) if tenant_relation?(o.name)
     end
     alias :visit_Arel_Nodes_TableAlias :visit_Arel_Table
 
@@ -157,7 +157,7 @@ module MultiTenant
     attr_reader :tenant_attribute
     def initialize(tenant_attribute)
       @tenant_attribute = tenant_attribute
-      @tenant_model = MultiTenant.multi_tenant_model_for_table(tenant_attribute.relation.table_name)
+      @tenant_model = MultiTenant.multi_tenant_model_for_table(tenant_attribute.relation.name)
     end
 
     def to_s; to_sql; end
@@ -189,7 +189,7 @@ module MultiTenant
     def initialize(tenant_attribute, table_left)
       super(tenant_attribute)
       @table_left = table_left
-      @model_left = MultiTenant.multi_tenant_model_for_table(table_left.table_name)
+      @model_left = MultiTenant.multi_tenant_model_for_table(table_left.name)
     end
 
     private
@@ -212,7 +212,7 @@ module MultiTenant
   module DatabaseStatements
     def join_to_update(update, *args)
       update = super(update, *args)
-      model = MultiTenant.multi_tenant_model_for_table(update.ast.relation.table_name)
+      model = MultiTenant.multi_tenant_model_for_table(update.ast.relation.name)
       if model.present? && !MultiTenant.with_write_only_mode_enabled? && MultiTenant.current_tenant_id.present?
         update.where(MultiTenant::TenantEnforcementClause.new(model.arel_table[model.partition_key]))
       end
@@ -221,7 +221,7 @@ module MultiTenant
 
     def join_to_delete(delete, *args)
       delete = super(delete, *args)
-      model = MultiTenant.multi_tenant_model_for_table(delete.ast.left.table_name)
+      model = MultiTenant.multi_tenant_model_for_table(delete.ast.left.name)
       if model.present? && !MultiTenant.with_write_only_mode_enabled? && MultiTenant.current_tenant_id.present?
         delete.where(MultiTenant::TenantEnforcementClause.new(model.arel_table[model.partition_key]))
       end
@@ -265,7 +265,7 @@ module ActiveRecord
           node = context.arel_node
 
           context.unhandled_relations.each do |relation|
-            model = MultiTenant.multi_tenant_model_for_table(relation.arel_table.table_name)
+            model = MultiTenant.multi_tenant_model_for_table(relation.arel_table.name)
 
             if MultiTenant.current_tenant_id
               enforcement_clause = MultiTenant::TenantEnforcementClause.new(relation.arel_table[model.partition_key])
@@ -305,8 +305,8 @@ module ActiveRecord
 
                 next unless relation_right && relation_left
 
-                model_right = MultiTenant.multi_tenant_model_for_table(relation_left.table_name)
-                model_left = MultiTenant.multi_tenant_model_for_table(relation_right.table_name)
+                model_right = MultiTenant.multi_tenant_model_for_table(relation_left.name)
+                model_left = MultiTenant.multi_tenant_model_for_table(relation_right.name)
                 if model_right && model_left
                   join_enforcement_clause = MultiTenant::TenantJoinEnforcementClause.new(relation_left[model_left.partition_key], relation_right)
                   node_join.right.expr = node_join.right.expr.and(join_enforcement_clause)
